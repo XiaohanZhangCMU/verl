@@ -1,0 +1,59 @@
+name: Sync Upstream
+
+on:
+  # Schedule every 30 minutes
+  schedule:
+    - cron: "0,30 * * * *"
+  # Still allow manual dispatch
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'xiaohan-zhang_data'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Configure git user
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+
+    - name: Sync with upstream
+      run: |
+        git checkout main
+        git remote add upstream https://github.com/volcengine/verl.git
+        git fetch upstream
+
+        if ! git merge --no-commit --no-ff upstream/main; then
+          echo "PR_TITLE=[Merge Conflicts] Sync with Public VeRL" >> $GITHUB_ENV
+          git commit -am "Merge upstream changes with conflicts"
+        else
+          echo "PR_TITLE=Sync with Public VeRL" >> $GITHUB_ENV
+          git commit -am "Merge upstream changes"
+        fi
+
+    - name: Get Repo Token
+      id: REPO_TOKEN
+      uses: tibdex/github-app-token@v1
+      with:
+        app_id: ${{ secrets.DEVOGE_BOT_APPID }}
+        private_key: ${{ secrets.DEVOGE_BOT_PEM }}
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v3
+      with:
+        title: ${{ env.PR_TITLE }}
+        body: "Automated pull request to sync with upstream changes"
+        branch: "sync-upstream"
+        reviewers: "xiaohan-zhang_data"
+        token: ${{ steps.REPO_TOKEN.outputs.token }}
+
